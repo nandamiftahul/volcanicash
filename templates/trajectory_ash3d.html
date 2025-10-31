@@ -336,6 +336,11 @@ body {
       </select>
 
       <button id="loadBtn">Tampilkan Trajektori</button>
+      <!-- Tambahkan di bawah tombol "Tampilkan Trajektori" -->
+      <button id="dispersionBtn">Sebaran Abu</button>
+      <button id="safetyBtn">Zona Aman FL</button>
+      <button id="windBtn">Angin</button>
+
       <span id="statusText" style="color:#ffe0b2;font-weight:600;"></span>
     </div>
 
@@ -612,6 +617,117 @@ function renderTrajectory(d, model){
     }
     requestAnimationFrame(tick);
   })(last);
+}
+/* === Tambahan API visualizer === */
+
+// 🌫️ Sebaran abu (ash dispersion)
+document.getElementById("dispersionBtn").addEventListener("click", async () => {
+  const volcano = document.getElementById("volcanoSelect").value;
+  const status = document.getElementById("statusText");
+  status.textContent = "⏳ Memuat sebaran abu...";
+  try {
+    const res = await fetch(`/api/ash_dispersion?volcano=${volcano}`);
+    const data = await res.json();
+    if (data.error) throw new Error(data.error);
+    status.textContent = "✅ Sebaran abu dimuat!";
+    renderAshDispersion(data);
+  } catch (e) {
+    status.textContent = "❌ Gagal memuat sebaran abu: " + e.message;
+  }
+});
+
+function renderAshDispersion(data) {
+  const { ScatterplotLayer, MapboxOverlay } = deck;
+  const points = data.points; // [lon, lat, intensity]
+
+  const ashLayer = new ScatterplotLayer({
+    id: "ash-points",
+    data: points.map(p => ({ position: [p[0], p[1]], intensity: p[2] })),
+    getPosition: d => d.position,
+    getRadius: d => 20000 * d.intensity,
+    getFillColor: [255, 150, 40, 100],
+    radiusMinPixels: 2,
+    radiusMaxPixels: 20,
+    pickable: false
+  });
+
+  if (deckOverlay) deckOverlay.setProps({ layers: [...deckOverlay.props.layers, ashLayer] });
+  else {
+    deckOverlay = new MapboxOverlay({ interleaved: true, layers: [ashLayer] });
+    map.addControl(deckOverlay);
+  }
+}
+
+// ✈️ Zona aman penerbangan
+document.getElementById("safetyBtn").addEventListener("click", async () => {
+  const status = document.getElementById("statusText");
+  status.textContent = "⏳ Memuat zona aman penerbangan...";
+  try {
+    const res = await fetch(`/api/flight_safety`);
+    const data = await res.json();
+    renderFlightSafety(data);
+    status.textContent = "✅ Zona aman FL dimuat!";
+  } catch (e) {
+    status.textContent = "❌ Gagal memuat zona aman: " + e.message;
+  }
+});
+
+function renderFlightSafety(data) {
+  const { PolygonLayer } = deck;
+  const zones = data.zones;
+
+  const layers = zones.map((z, i) => new PolygonLayer({
+    id: `fl-zone-${i}`,
+    data: [{ polygon: z.coords }],
+    getPolygon: d => d.polygon,
+    filled: true,
+    stroked: true,
+    getFillColor: z.risk === "safe" ? [0,255,100,60] : [255,80,0,80],
+    getLineColor: [255,255,255],
+    lineWidthMinPixels: 2
+  }));
+
+  deckOverlay.setProps({ layers: [...deckOverlay.props.layers, ...layers] });
+}
+
+// 💨 Arah dan kecepatan angin
+document.getElementById("windBtn").addEventListener("click", async () => {
+  const status = document.getElementById("statusText");
+  status.textContent = "⏳ Memuat data angin...";
+  try {
+    const res = await fetch(`/api/weather_wind`);
+    const data = await res.json();
+    renderWind(data);
+    status.textContent = "✅ Angin dimuat!";
+  } catch (e) {
+    status.textContent = "❌ Gagal memuat data angin: " + e.message;
+  }
+});
+
+function renderWind(data) {
+  const { IconLayer } = deck;
+  const vectors = data.vectors; // [lon, lat, u, v]
+
+  const windLayer = new IconLayer({
+    id: "wind-vectors",
+    data: vectors.map(v => ({
+      position: [v[0], v[1]],
+      angle: Math.atan2(v[3], v[2]) * 180 / Math.PI,
+      speed: Math.sqrt(v[2] ** 2 + v[3] ** 2)
+    })),
+    getPosition: d => d.position,
+    getIcon: () => ({
+      url: "https://cdn-icons-png.flaticon.com/512/54/54425.png",
+      width: 128,
+      height: 128
+    }),
+    getSize: d => Math.min(30, 5 + d.speed * 1.2),
+    getAngle: d => d.angle,
+    sizeUnits: "pixels",
+    pickable: false
+  });
+
+  deckOverlay.setProps({ layers: [...deckOverlay.props.layers, windLayer] });
 }
 
 </script>
