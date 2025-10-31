@@ -1,0 +1,45 @@
+# === Core Flask Framework ===
+Flask==3.0.3
+Flask-Cors==4.0.1
+
+# === Environment & Configuration ===
+python-dotenv==1.0.1
+
+# === Data & Math Utilities ===
+numpy==1.26.4
+pandas==2.2.3
+
+# === Date & Time Handling ===
+python-dateutil==2.9.0.post0
+
+# === Geospatial Utilities ===
+geopy==2.4.1
+pyproj==3.6.1
+
+# === Scientific Computation ===
+scipy==1.14.1
+metpy==1.6.1
+
+# === Visualization & Simulation Support ===
+matplotlib==3.9.2
+
+# === Web Request / Parsing ===
+requests==2.32.3
+
+# === JSON / Serialization ===
+orjson==3.10.7
+
+# === Development Utilities ===
+gunicorn==23.0.0
+
+# === Optional (untuk ash/hysplit data processing) ===
+xarray==2024.6.0
+netCDF4==1.7.1.post2
+h5netcdf==1.3.0
+
+# === Optional (kalau mau pakai async data fetch) ===
+aiohttp==3.10.5
+
+# === Optional (untuk data gridded atau peta angin NOAA) ===
+cfgrib==0.9.14.1
+eccodes==2.35.0
