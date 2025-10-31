@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<title>Volcanic Trajectory 3D Viewer</title>
+
+<!-- Fonts & Icons -->
+<link href="{{ url_for('static', filename='libs/fonts/inter/inter.css') }}" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+<script src="{{ url_for('static', filename='libs/jquery/jquery-3.6.0.min.js') }}"></script>
+<link href="{{ url_for('static', filename='libs/maplibre/maplibre-gl.css') }}" rel="stylesheet">
+<script src="{{ url_for('static', filename='libs/maplibre/maplibre-gl.js') }}"></script>
+<script src="{{ url_for('static', filename='libs/deckgl/deck.gl.min.js') }}"></script>
+
+<style>
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Inter", sans-serif;
+  display: flex;
+  flex-direction: row;
+  min-height: 100vh;
+  background: linear-gradient(to bottom right, #5c2200, #c85a00, #ffb347);
+  color: white;
+  overflow-y: auto;
+  transition: all 0.3s ease;
+}
+
+/* Sidebar (sama seperti Rason, warna oranye) */
+.sidebar {
+  width: 230px;
+  background: rgba(255,255,255,0.08);
+  backdrop-filter: blur(8px);
+  border-right: 1px solid rgba(255,255,255,0.15);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 40px 10px 20px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  z-index: 10;
+  transition: width 0.3s ease, transform 0.3s ease;
+}
+.sidebar h2 {
+  font-size: 20px;
+  margin-bottom: 30px;
+  color: #ffe0b2;
+  text-align: center;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  text-shadow: 0 0 6px rgba(255,255,255,0.3);
+  border-bottom: 1px solid rgba(255,255,255,0.15);
+  padding-bottom: 8px;
+}
+.sidebar a {
+  display: flex; align-items: center; gap: 10px;
+  text-decoration: none; color: white;
+  width: 100%; padding: 12px 15px;
+  border-radius: 8px; margin: 8px 0;
+  transition: background 0.3s ease;
+}
+.sidebar a:hover { background: rgba(255,255,255,0.15); }
+.sidebar a i { font-size: 18px; color: #ffcc80; width: 22px; text-align: center; }
+.sidebar.compact { width: 70px; align-items: flex-start; padding: 60px 5px; }
+.sidebar.compact h2 { opacity: 0; height: 0; margin: 0; overflow: hidden; }
+.sidebar.compact a span { opacity: 0; width: 0; overflow: hidden; }
+
+/* Toggle Button */
+.toggle-btn {
+  position: fixed;
+  top: 50%;
+  transform: translateY(-50%);
+  left: 230px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  color: white;
+  font-size: 16px;
+  cursor: pointer;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(5px);
+  transition: left 0.3s ease, background 0.3s ease;
+}
+.toggle-btn:hover {
+  background: rgba(255,255,255,0.4);
+}
+.toggle-btn.compact-position {
+  left: 70px;
+}
+
+/* Main */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  margin-left: 230px;
+  padding: 40px 20px 60px 20px; /* kanan & kiri dipersempit */
+  box-sizing: border-box;
+  min-height: 100vh;
+  width: calc(100% - 230px);
+  overflow: hidden;
+}
+
+
+/* Header */
+.header-box {
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 12px;
+  padding: 20px 30px;
+  box-shadow: 0 6px 25px rgba(0,0,0,0.3);
+  display: flex; align-items: center; gap: 18px; margin-bottom: 14px;
+}
+.header-icon {
+  width: 50px; height: 50px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 26px; color: #ffcc80;
+}
+.header-text h1 { margin: 0; font-size: 26px; font-weight: 600; }
+.header-text p { margin: 4px 0 0; font-size: 14px; color: #ffe0b2; }
+
+/* Filter Bar */
+.filter-bar {
+  background: rgba(255,255,255,0.12);
+  border-radius: 10px;
+  padding: 10px 16px;
+  display: flex; flex-wrap: wrap;
+  align-items: center; gap: 12px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.filter-bar label { color: #ffe0b2; font-weight: 600; }
+.filter-bar select, .filter-bar button {
+  background: rgba(255,255,255,0.1);
+  color: white; border: 0; border-radius: 8px;
+  padding: 8px 10px; font-family: inherit;
+}
+.filter-bar button {
+  background: #ff7f11; border: none; cursor: pointer;
+  font-weight: 600; transition: background 0.2s;
+}
+.filter-bar button:hover { background: #ff9f33; }
+
+/* Map */
+#map-container {
+  position: relative;
+  width: 100%;
+  max-width: 100%;
+  height: 72vh;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+  margin-top: 10px;
+}
+
+#map { position: absolute; inset: 0; }
+
+/* Footer */
+.footer {
+  position: fixed;
+  bottom: 0; left: 230px;
+  width: calc(100% - 230px);
+  height: 38px;
+  background: rgba(255,255,255,0.9);
+  color: #4b2e00;
+  font-weight: 600;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px;
+  border-top: 1px solid rgba(0,0,0,0.2);
+}
+.playback-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 10px;
+  padding: 10px 16px;
+  margin-top: 10px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+}
+.playback-bar button {
+  background: #ff7f11;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-weight: 600;
+}
+.playback-bar button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.playback-bar input[type="range"] {
+  accent-color: #ff7f11;
+  height: 6px;
+  cursor: pointer;
+}
+.playback-bar span, .playback-bar label {
+  font-size: 13px;
+  color: #ffe0b2;
+  user-select: none;
+}
+/* === Kompas Utara === */
+#northArrow {
+  position: absolute;
+  bottom: 18px;
+  right: 18px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 3px 10px rgba(0,0,0,0.4);
+  text-align: center;
+  pointer-events: none;
+  z-index: 400;
+  font-family: "Inter", sans-serif;
+}
+
+#northArrow .arrow {
+  font-size: 22px;
+  color: #ff4c4c;
+  margin-top: 8px;
+  transition: transform 0.2s linear;
+}
+
+#northArrow span {
+  display: block;
+  font-size: 13px;
+  color: white;
+  margin-top: -3px;
+  font-weight: 600;
+}
+#northArrow {
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(5px);
+}
+#northArrow .arrow {
+  text-shadow: 0 0 6px rgba(255, 80, 80, 0.7);
+}
+/* === Info Panel (kanan atas) === */
+#infoPanel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 240px;
+  background: rgba(255,255,255,0.15);
+  border: 1px solid rgba(255,255,255,0.25);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #fff3e0;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.35);
+  z-index: 500;
+}
+
+#infoPanel h3 {
+  margin: 0 0 8px 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #ffd580;
+  border-bottom: 1px solid rgba(255,255,255,0.25);
+  padding-bottom: 4px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  margin: 3px 0;
+}
+
+.info-row span {
+  color: #ffebc0;
+  opacity: 0.8;
+}
+
+.info-row b {
+  color: #fff;
+  font-weight: 600;
+}
+
+</style>
+</head>
+
+<body>
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <h2>VOLCANIC PANEL</h2>
+    <a href="#" data-title="Trajectory 3D"><i class="bi bi-globe2"></i><span>Trajectory 3D</span></a>
+    <a href="#" data-title="NOAA Data"><i class="bi bi-cloud-upload"></i><span>NOAA Data</span></a>
+    <a href="#" data-title="Comparison"><i class="bi bi-intersect"></i><span>Comparison</span></a>
+    <a href="#" data-title="Analysis"><i class="bi bi-bar-chart"></i><span>Analysis</span></a>
+    <a href="#" data-title="Settings"><i class="bi bi-gear"></i><span>Settings</span></a>
+  </div>
+
+  <button class="toggle-btn compact-position" id="toggleBtn" onclick="toggleSidebar()">☰</button>
+
+  <!-- Main -->
+  <div class="main" id="mainContent">
+    <div class="header-box">
+      <div class="header-icon">🌋</div>
+      <div class="header-text">
+        <h1>Volcanic Trajectory 3D Viewer</h1>
+        <p>Visualisasi pemodelan abu vulkanik berbasis data NOAA</p>
+      </div>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+      <label>Model:</label>
+      <select id="modelSelect">
+        <option value="custom">Custom Model</option>
+        <option value="noaa">NOAA HYSPLIT</option>
+      </select>
+
+      <label>Gunung:</label>
+      <select id="volcanoSelect">
+        <option value="merapi">Merapi</option>
+        <option value="semeru">Semeru</option>
+        <option value="bromo">Bromo</option>
+        <option value="kelud">Kelud</option>
+      </select>
+
+      <button id="loadBtn">Tampilkan Trajektori</button>
+      <span id="statusText" style="color:#ffe0b2;font-weight:600;"></span>
+    </div>
+
+    <div id="map-container">
+      <div id="map"></div>
+      <!-- 📊 Info Window -->
+      <div id="infoPanel">
+        <h3>🌋 Info Model</h3>
+        <div class="info-row"><span>Volcano:</span><b id="infoVolcano">-</b></div>
+        <div class="info-row"><span>Model:</span><b id="infoModel">-</b></div>
+        <div class="info-row"><span>Time:</span><b id="infoTime">0 s</b></div>
+        <div class="info-row"><span>Spread:</span><b id="infoSpread">-</b></div>
+        <div class="info-row"><span>Direction:</span><b id="infoDir">-</b></div>
+      </div>
+      <!-- 🧭 Kompas Arah Utara -->
+      <div id="northArrow">
+        <div class="arrow">▲</div>
+        <span>N</span>
+      </div>    
+    </div>
+    <!-- 🎞️ Playback Controls -->
+    <div class="playback-bar">
+      <button id="btn-play">▶️ Play</button>
+      <button id="btn-pause" disabled>⏸️ Pause</button>
+      <label>Speed:</label>
+      <input id="speed" type="range" min="1" max="10000" step="1" value="1">
+      <span id="sp-val">1×</span>
+      <input id="prog" type="range" min="0" max="100" step="0.5" value="0" style="flex:1;">
+      <span id="st-elap">0 s</span>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    © 2025 Terrindo · BMKG Volcanic Trajectory Prototype
+  </div>
+
+<script>
+/* Sidebar toggle */
+function toggleSidebar(forceCompact = null) {
+  const sb  = document.getElementById("sidebar");
+  const main = document.getElementById("mainContent");
+  const btn  = document.getElementById("toggleBtn");
+  const ft   = document.querySelector(".footer");
+
+  let isCompact = sb.classList.contains("compact");
+  if (forceCompact !== null) isCompact = forceCompact;
+  else isCompact = !isCompact;
+
+  sb.classList.toggle("compact", isCompact);
+  main.style.marginLeft = isCompact ? "70px" : "230px";
+  main.style.width      = isCompact ? "calc(100% - 70px)" : "calc(100% - 230px)";
+  btn.classList.toggle("compact-position", isCompact);
+  btn.textContent = isCompact ? "☰" : "❮";
+  ft.style.left   = isCompact ? "70px" : "230px";
+  localStorage.setItem("sidebarState", isCompact ? "compact" : "expanded");
+
+  // 🧩 force resize map setelah animasi layout selesai
+  setTimeout(() => {
+    if (window.map && typeof window.map.resize === "function") {
+      window.map.resize();
+    }
+  }, 350); // sedikit delay biar transisi CSS selesai
+}
+
+/* Map Init */
+let map, deckOverlay;
+window.addEventListener("DOMContentLoaded",()=>{
+  map = new maplibregl.Map({
+    container:"map",
+    style:{
+      version:8,
+      sources:{
+        esri:{type:"raster",tiles:["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],tileSize:256}
+      },
+      layers:[{id:"esri",type:"raster",source:"esri"}]
+    },
+    center:[110.5,-7.3],
+    zoom:6.3,pitch:40,bearing:10,antialias:true
+  });
+
+  // === Restore sidebar state saat halaman dibuka ===
+  const savedState = localStorage.getItem("sidebarState");
+  if (savedState === "compact") toggleSidebar(true);
+  else toggleSidebar(false);
+
+  // === Perhatikan setiap perubahan ukuran container
+  const container = document.getElementById("map-container");
+  const resizeObserver = new ResizeObserver(() => {
+    if (map && typeof map.resize === "function") {
+      map.resize();
+    }
+  });
+  resizeObserver.observe(container);
+});
+
+
+/* Fetch trajectory & visualize */
+document.getElementById("loadBtn").addEventListener("click", async ()=>{
+  const model=document.getElementById("modelSelect").value;
+  const volcano=document.getElementById("volcanoSelect").value;
+  const status=document.getElementById("statusText");
+  status.textContent="⏳ Memuat data trajektori...";
+  const url=model==="custom"?`/api/ash_trajectory?volcano=${volcano}&hours=12&alt=10000`
+                             :`/api/hysplit_trajectory?volcano=${volcano}&hours=12&alt=10000`;
+  try{
+    const res=await fetch(url);
+    const data=await res.json();
+    if(data.error){status.textContent="⚠️ "+data.error;return;}
+    status.textContent="✅ Trajektori dimuat!";
+    renderTrajectory(data,model);
+  }catch(e){
+    status.textContent="❌ Error: "+e.message;
+  }
+});
+
+function renderTrajectory(d, model){
+  if(!map) return;
+
+  const { TripsLayer, PolygonLayer, MapboxOverlay } = deck;
+
+  // --- data dasar
+  const timestamps = d.trip.timestamps;
+  const t0 = Math.min(...timestamps);
+  const ts = timestamps.map(t => (t - t0)); // detik relatif
+  const path = d.trip.path;
+  const color = (model === "custom") ? [255, 180, 40] : [60, 180, 255];
+
+  // --- fokus peta ke lintasan
+  const centerLon = path.reduce((s, p) => s + p[0], 0) / path.length;
+  const centerLat = path.reduce((s, p) => s + p[1], 0) / path.length;
+  map.flyTo({ center: [centerLon, centerLat], zoom: 7, pitch: 50, bearing: 20 });
+
+  // --- geometri dasar untuk fan zona abu
+  const [lon0, lat0] = path[0];
+  const [lon1, lat1] = path[path.length - 1];
+  const dx = lon1 - lon0, dy = lat1 - lat0;
+  const baseAngle = Math.atan2(dy, dx);
+  const distDeg = Math.sqrt(dx*dx + dy*dy);   // derajat
+  const distKm  = distDeg * 111;              // kasar: 1° ≈ 111 km
+  const spreadDegBase = 10;                   // lebar dasar kipas (derajat)
+
+  // --- kontrol animasi (play/pause/seek/speed)
+  const pl   = document.getElementById("btn-play");
+  const pa   = document.getElementById("btn-pause");
+  const spdR = document.getElementById("speed");
+  const spv  = document.getElementById("sp-val");
+  const prog = document.getElementById("prog");
+  const el   = document.getElementById("st-elap");
+
+  let play = false;
+  let cur  = 0;                  // detik sekarang
+  let spd  = parseFloat(spdR.value) || 1;
+  const dur = ts.at(-1);         // durasi total (detik)
+
+  // tampilkan awal
+  spv.textContent = (spd >= 10 ? Math.round(spd) : spd.toFixed(1)) + "×";
+  el.textContent = Math.round(cur) + " s";
+
+  // --- UI handlers
+  spdR.oninput = e => {
+    spd = parseFloat(e.target.value);
+    spv.textContent = (spd >= 10 ? Math.round(spd) : spd.toFixed(1)) + "×";
+  };
+  pl.onclick = () => { play = true;  pl.disabled = true;  pa.disabled = false; };
+  pa.onclick = () => { play = false; pl.disabled = false; pa.disabled = true;  };
+
+  prog.oninput = e => {
+    cur = parseFloat(e.target.value) / 100 * dur;
+    el.textContent = Math.round(cur) + " s";
+    updateDeck();
+    updateInfoPanel(cur);
+  };
+
+  // --- builder layer (pakai cur untuk animasi)
+  function makeLayers(){
+    // progress 0..1
+    const frac = dur > 0 ? (cur / dur) : 0;
+    const rad = Math.PI / 180;
+
+    // skala panjang kipas & lebar kipas sesuai waktu
+    const fanDistDeg = distDeg * (0.3 + frac * 1.4);      // makin lama makin panjang
+    const spreadNow  = spreadDegBase * (0.5 + frac);      // makin lama makin lebar
+    const leftAngle  = baseAngle - spreadNow * rad;
+    const rightAngle = baseAngle + spreadNow * rad;
+
+    const leftPoint  = [lon0 + fanDistDeg * Math.cos(leftAngle),  lat0 + fanDistDeg * Math.sin(leftAngle)];
+    const rightPoint = [lon0 + fanDistDeg * Math.cos(rightAngle), lat0 + fanDistDeg * Math.sin(rightAngle)];
+
+    const ashPolygon = [ [lon0, lat0], leftPoint, rightPoint ];
+
+    const trajLayer = new TripsLayer({
+      id: "traj",
+      data: [{ path, timestamps: ts }],
+      getPath: d => d.path,
+      getTimestamps: d => d.timestamps,
+      getColor: color,
+      widthMinPixels: 5,
+      trailLength: 2000,      // panjang jejak
+      currentTime: cur        // ini yang bikin garis “bergerak”
+    });
+
+    const polygonLayer = new PolygonLayer({
+      id: "ash-zone",
+      data: [{ polygon: ashPolygon }],
+      getPolygon: d => d.polygon,
+      extruded: true,
+      elevationScale: 300,
+      getElevation: () => 500,        // “ketebalan” visual
+      getFillColor: [255, 150, 40, 120],
+      getLineColor: [255, 220, 120],
+      lineWidthMinPixels: 2,
+      stroked: true,
+      filled: true,
+      opacity: 0.4,
+      pickable: false
+    });
+
+    return [polygonLayer, trajLayer];
+  }
+
+  // --- pasang / update overlay deck.gl
+  if (deckOverlay) deckOverlay.setProps({ layers: makeLayers() });
+  else {
+    deckOverlay = new MapboxOverlay({ interleaved: true, layers: makeLayers() });
+    map.addControl(deckOverlay);
+  }
+
+  function updateDeck(){
+    deckOverlay.setProps({ layers: makeLayers() });
+  }
+
+  // --- Info panel (DI DALAM renderTrajectory agar punya akses variabel)
+  function updateInfoPanel(curSec){
+    const volcano = document.getElementById("volcanoSelect").value;
+    const modelTxt = (document.getElementById("modelSelect").value === "custom") ? "Custom Model" : "NOAA HYSPLIT";
+    const frac = dur > 0 ? (curSec / dur) : 0;
+
+    const spreadKmNow = distKm * (0.3 + frac * 1.4);           // estimasi panjang kipas saat ini
+    const angleDeg = (baseAngle * 180 / Math.PI + 360) % 360;  // 0..360°
+
+    document.getElementById("infoVolcano").textContent = volcano[0].toUpperCase() + volcano.slice(1);
+    document.getElementById("infoModel").textContent   = modelTxt;
+    document.getElementById("infoTime").textContent    = Math.round(curSec) + " s";
+    document.getElementById("infoSpread").textContent  = spreadKmNow.toFixed(1) + " km";
+    document.getElementById("infoDir").textContent     = angleDeg.toFixed(0) + "°";
+  }
+
+  // --- Kompas (pastikan tidak dobel)
+  if (!map.__northBound) {
+    map.__northBound = true;
+    const northArrow = document.getElementById("northArrow");
+    map.on("rotate", () => {
+      const bearing = map.getBearing();
+      northArrow.querySelector(".arrow").style.transform = `rotate(${-bearing}deg)`;
+    });
+  }
+
+  // --- start: render awal
+  updateDeck();
+  updateInfoPanel(cur);
+
+  // --- loop animasi
+  let last = performance.now();
+  (function tick(now){
+    const dt = (now - last) / 1000; last = now;
+    if (play) {
+      cur += dt * spd;
+      if (cur >= dur) { cur = dur; play = false; pl.disabled = false; pa.disabled = true; }
+      prog.value = (dur > 0) ? (cur / dur) * 100 : 0;
+      el.textContent = Math.round(cur) + " s";
+      updateDeck();
+      updateInfoPanel(cur);
+    }
+    requestAnimationFrame(tick);
+  })(last);
+}
+
+</script>
+</body>
+</html>
