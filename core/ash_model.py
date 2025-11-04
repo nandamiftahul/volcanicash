@@ -12,7 +12,6 @@ VOLCANOES = {
     "tangkuban": {"lat": -6.759, "lon": 107.606, "elev": 2084},
 }
 
-
 def get_dummy_wind_field():
     """
     Angin idealisasi di atas Pulau Jawa:
@@ -25,43 +24,65 @@ def get_dummy_wind_field():
     v = np.array([1, 1, 2, 1, 0, -2])     # arah selatan (+) ke utara
     return {"z": z, "u": u, "v": v}
 
-
 def simulate_ash_trajectory(volcano: str = "merapi",
                             hours: int = 12,
                             plume_top_m: float = 10000.0,
+                            particles: int = 10,
                             wind_field=None):
     """
-    Simulasi penyebaran abu vulkanik di atas Pulau Jawa (model sederhana).
+    Simulasi penyebaran abu vulkanik di atas Pulau Jawa.
+    Sekarang mendukung banyak partikel (trips) agar terlihat menyebar di visualisasi 3D.
     """
 
     if volcano not in VOLCANOES:
         raise ValueError(f"Gunung '{volcano}' tidak dikenal. Pilih salah satu: {list(VOLCANOES)}")
 
     v = VOLCANOES[volcano]
-    lat, lon, alt = v["lat"], v["lon"], plume_top_m
+    base_lat, base_lon = v["lat"], v["lon"]
     dt = 3600  # 1 jam
 
     if wind_field is None:
         wind_field = get_dummy_wind_field()
 
     now = datetime.utcnow()
-    timestamps = []
-    path = []
+    timestamps = [(now + timedelta(hours=i)).timestamp() for i in range(hours + 1)]
+    trips = []
 
-    for i in range(hours + 1):
-        timestamps.append((now + timedelta(hours=i)).timestamp())
-        path.append([lon, lat, alt])
+    # === Loop tiap partikel abu ===
+    for p in range(particles):
+        lat = base_lat
+        lon = base_lon
+        alt = plume_top_m
 
-        u = np.interp(alt, wind_field["z"], wind_field["u"])
-        v_ = np.interp(alt, wind_field["z"], wind_field["v"])
+        # variasi kecil tiap partikel (arah, kecepatan, sink rate)
+        angle_dev = np.radians(np.random.uniform(-15, 15))   # derajat deviasi
+        speed_factor = np.random.uniform(0.8, 1.2)
+        sink_factor = np.random.uniform(0.8, 1.2)
+        path = []
 
-        # ubah m/s → derajat
-        dlat = (v_ * dt) / 111000
-        dlon = (u * dt) / (111000 * np.cos(np.radians(lat)))
+        for i in range(hours + 1):
+            path.append([lon, lat, alt])
 
-        lat += dlat
-        lon += dlon
-        alt = max(0, alt - 150)  # sink 150 m/jam
+            # ambil u,v sesuai tinggi
+            u = np.interp(alt, wind_field["z"], wind_field["u"]) * speed_factor
+            v_ = np.interp(alt, wind_field["z"], wind_field["v"]) * speed_factor
+
+            # rotasi arah sedikit agar tiap partikel menyebar
+            u_rot = u * np.cos(angle_dev) - v_ * np.sin(angle_dev)
+            v_rot = u * np.sin(angle_dev) + v_ * np.cos(angle_dev)
+
+            # ubah ke derajat per jam
+            dlat = (v_rot * dt) / 111000
+            dlon = (u_rot * dt) / (111000 * np.cos(np.radians(lat)))
+
+            lat += dlat
+            lon += dlon
+            alt = max(0, alt - 150 * sink_factor)
+
+        trips.append({
+            "path": path,
+            "timestamps": timestamps
+        })
 
     return {
         "meta": {
@@ -70,14 +91,11 @@ def simulate_ash_trajectory(volcano: str = "merapi",
             "volcano": volcano,
             "start": now.isoformat(),
             "duration_hr": hours,
-            "top_alt_m": plume_top_m
+            "top_alt_m": plume_top_m,
+            "particles": particles
         },
-        "trip": {
-            "path": path,
-            "timestamps": timestamps
-        }
+        "trips": trips
     }
-
 
 if __name__ == "__main__":
     traj = simulate_ash_trajectory("semeru", hours=12, plume_top_m=12000)

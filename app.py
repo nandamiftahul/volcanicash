@@ -10,11 +10,8 @@ def create_app():
     app = Flask(__name__)
 
     # === Register Blueprints ===
-    from routes.api_ash import bp as ash_bp
-    from routes.api_hysplit import bp as hysplit_bp
-
-    app.register_blueprint(ash_bp)
-    app.register_blueprint(hysplit_bp)
+    from routes.api import bp as api_bp
+    app.register_blueprint(api_bp)
 
     # === Routes untuk halaman utama ===
     @app.route("/")

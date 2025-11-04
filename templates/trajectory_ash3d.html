@@ -292,6 +292,39 @@ body {
   color: #fff;
   font-weight: 600;
 }
+#zoneToggleBtn {
+  position: absolute;
+  bottom: 80px;   /* ✅ sekarang di atas kompas (kompas bottom: 18px + 52px + jarak 10px) */
+  right: 18px;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: #ffd580;
+  cursor: pointer;
+  backdrop-filter: blur(5px);
+  box-shadow: 0 4px 14px rgba(0,0,0,0.45);
+  z-index: 501;
+  transition: all 0.2s ease;
+}
+#zoneToggleBtn:hover {
+  background: rgba(255,180,40,0.35);
+  color: #fff;
+}
+#zoneToggleBtn.active {
+  background: rgba(255,180,40,0.65);
+  color: #fff;
+  transform: scale(1.05);
+}
+
+.filter-bar select {
+  min-width: 110px;
+}
 
 </style>
 </head>
@@ -335,12 +368,27 @@ body {
         <option value="kelud">Kelud</option>
       </select>
 
-      <button id="loadBtn">Tampilkan Trajektori</button>
-      <!-- Tambahkan di bawah tombol "Tampilkan Trajektori" -->
-      <button id="dispersionBtn">Sebaran Abu</button>
-      <button id="safetyBtn">Zona Aman FL</button>
-      <button id="windBtn">Angin</button>
+      <label>Partikel:</label>
+      <select id="particleSelect">
+        <option value="1">1 Partikel (single)</option>
+        <option value="3">3 Partikel</option>
+        <option value="5">5 Partikel</option>
+        <option value="10">10 Partikel</option>
+        <option value="20">20 Partikel</option>
+        <option value="50">50 Partikel (dense)</option>
+      </select>
+      
+      <label>Ketinggian:</label>
+      <select id="altSelect">
+        <option value="3000">3 km</option>
+        <option value="5000">5 km</option>
+        <option value="8000">8 km</option>
+        <option value="10000" selected>10 km</option>
+        <option value="12000">12 km</option>
+        <option value="15000">15 km</option>
+      </select>
 
+      <button id="loadBtn">Tampilkan Trajektori</button>
       <span id="statusText" style="color:#ffe0b2;font-weight:600;"></span>
     </div>
 
@@ -354,6 +402,10 @@ body {
         <div class="info-row"><span>Time:</span><b id="infoTime">0 s</b></div>
         <div class="info-row"><span>Spread:</span><b id="infoSpread">-</b></div>
         <div class="info-row"><span>Direction:</span><b id="infoDir">-</b></div>
+      </div>
+      <!-- ☁️ Tombol Toggle Zona 3D -->
+      <div id="zoneToggleBtn" title="Tampilkan / sembunyikan zona abu 3D">
+        <i class="bi bi-bullseye"></i>
       </div>
       <!-- 🧭 Kompas Arah Utara -->
       <div id="northArrow">
@@ -398,15 +450,14 @@ function toggleSidebar(forceCompact = null) {
   ft.style.left   = isCompact ? "70px" : "230px";
   localStorage.setItem("sidebarState", isCompact ? "compact" : "expanded");
 
-  // 🧩 force resize map setelah animasi layout selesai
   setTimeout(() => {
     if (window.map && typeof window.map.resize === "function") {
       window.map.resize();
     }
-  }, 350); // sedikit delay biar transisi CSS selesai
+  }, 350);
 }
 
-/* Map Init */
+/* Map init */
 let map, deckOverlay;
 window.addEventListener("DOMContentLoaded",()=>{
   map = new maplibregl.Map({
@@ -414,7 +465,9 @@ window.addEventListener("DOMContentLoaded",()=>{
     style:{
       version:8,
       sources:{
-        esri:{type:"raster",tiles:["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],tileSize:256}
+        esri:{type:"raster",tiles:[
+          "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+        ],tileSize:256}
       },
       layers:[{id:"esri",type:"raster",source:"esri"}]
     },
@@ -422,314 +475,236 @@ window.addEventListener("DOMContentLoaded",()=>{
     zoom:6.3,pitch:40,bearing:10,antialias:true
   });
 
-  // === Restore sidebar state saat halaman dibuka ===
   const savedState = localStorage.getItem("sidebarState");
-  if (savedState === "compact") toggleSidebar(true);
-  else toggleSidebar(false);
+  toggleSidebar(savedState === "compact");
 
-  // === Perhatikan setiap perubahan ukuran container
   const container = document.getElementById("map-container");
-  const resizeObserver = new ResizeObserver(() => {
-    if (map && typeof map.resize === "function") {
-      map.resize();
-    }
-  });
-  resizeObserver.observe(container);
+  new ResizeObserver(()=>map.resize()).observe(container);
+
+  // === Tambahkan legend warna altitude ===
+  const legend = document.createElement("div");
+  legend.id = "altLegend";
+legend.style.cssText = `
+  position:absolute;bottom:18px;left:18px;background:rgba(255,255,255,0.15);
+  border:1px solid rgba(255,255,255,0.3);border-radius:10px;padding:8px 10px;
+  font-size:12px;color:#fff;backdrop-filter:blur(4px);
+  box-shadow:0 2px 10px rgba(0,0,0,0.4);z-index:502;
+`;
+
+  legend.innerHTML = `
+    <b style="color:#ffd580;">Altitude Legend</b><br>
+    <div style="display:flex;align-items:center;gap:6px;"><div style="width:12px;height:12px;background:rgb(255,100,100);border-radius:3px;"></div>3 km</div>
+    <div style="display:flex;align-items:center;gap:6px;"><div style="width:12px;height:12px;background:rgb(255,180,60);border-radius:3px;"></div>5 km</div>
+    <div style="display:flex;align-items:center;gap:6px;"><div style="width:12px;height:12px;background:rgb(255,240,60);border-radius:3px;"></div>8 km</div>
+    <div style="display:flex;align-items:center;gap:6px;"><div style="width:12px;height:12px;background:rgb(100,220,255);border-radius:3px;"></div>10 km</div>
+    <div style="display:flex;align-items:center;gap:6px;"><div style="width:12px;height:12px;background:rgb(180,100,255);border-radius:3px;"></div>12 km</div>
+  `;
+  document.getElementById("map-container").appendChild(legend);
 });
 
-
-/* Fetch trajectory & visualize */
+/* Fetch & visualize */
 document.getElementById("loadBtn").addEventListener("click", async ()=>{
   const model=document.getElementById("modelSelect").value;
   const volcano=document.getElementById("volcanoSelect").value;
+  const particle=document.getElementById("particleSelect").value;
+  const alt=document.getElementById("altSelect").value;
   const status=document.getElementById("statusText");
+
   status.textContent="⏳ Memuat data trajektori...";
-  const url=model==="custom"?`/api/ash_trajectory?volcano=${volcano}&hours=12&alt=10000`
-                             :`/api/hysplit_trajectory?volcano=${volcano}&hours=12&alt=10000`;
-  try{
+
+const url = model === "custom"
+  ? `/api/ash_trajectory_multi?volcano=${volcano}&hours=12&alt=${alt}&particles=${particle}`
+  : `/api/hysplit_trajectory_multi?volcano=${volcano}&hours=12&alt=${alt}&particles=${particle}`;
+
+  try {
     const res=await fetch(url);
     const data=await res.json();
     if(data.error){status.textContent="⚠️ "+data.error;return;}
     status.textContent="✅ Trajektori dimuat!";
-    renderTrajectory(data,model);
-  }catch(e){
+    renderTrajectory(data, model);
+  } catch(e){
     status.textContent="❌ Error: "+e.message;
   }
 });
 
 function renderTrajectory(d, model){
-  if(!map) return;
+  if (!map) return;
+  const { TripsLayer, PolygonLayer } = deck;
 
-  const { TripsLayer, PolygonLayer, MapboxOverlay } = deck;
+  let trips = [];
+  if (Array.isArray(d.trips)) trips = d.trips;
+  else if (d.trip && d.trip.path) trips = [d.trip];
+  else { alert("❌ Data trajectory tidak valid."); return; }
 
-  // --- data dasar
-  const timestamps = d.trip.timestamps;
+  trips = trips.filter(t => Array.isArray(t.path) && t.path.length > 1);
+  if (trips.length === 0) { alert("❌ Tidak ada lintasan valid."); return; }
+
+  const timestamps = trips[0].timestamps;
   const t0 = Math.min(...timestamps);
-  const ts = timestamps.map(t => (t - t0)); // detik relatif
-  const path = d.trip.path;
-  const color = (model === "custom") ? [255, 180, 40] : [60, 180, 255];
+  const dur = timestamps.at(-1) - t0;
 
-  // --- fokus peta ke lintasan
-  const centerLon = path.reduce((s, p) => s + p[0], 0) / path.length;
-  const centerLat = path.reduce((s, p) => s + p[1], 0) / path.length;
-  map.flyTo({ center: [centerLon, centerLat], zoom: 7, pitch: 50, bearing: 20 });
+  const allPoints = trips.flatMap(t => t.path);
+  const centerLon = allPoints.reduce((s, p) => s + p[0], 0) / allPoints.length;
+  const centerLat = allPoints.reduce((s, p) => s + p[1], 0) / allPoints.length;
+  map.flyTo({ center:[centerLon,centerLat], zoom:7, pitch:50, bearing:20 });
 
-  // --- geometri dasar untuk fan zona abu
-  const [lon0, lat0] = path[0];
-  const [lon1, lat1] = path[path.length - 1];
-  const dx = lon1 - lon0, dy = lat1 - lat0;
-  const baseAngle = Math.atan2(dy, dx);
-  const distDeg = Math.sqrt(dx*dx + dy*dy);   // derajat
-  const distKm  = distDeg * 111;              // kasar: 1° ≈ 111 km
-  const spreadDegBase = 10;                   // lebar dasar kipas (derajat)
+  const longest = trips.reduce((a,b)=>a.path.length>b.path.length?a:b);
+  const [lon0,lat0]=longest.path[0];
+  const [lon1,lat1]=longest.path.at(-1);
+  const dx=lon1-lon0, dy=lat1-lat0;
+  const baseAngle=Math.atan2(dy,dx);
+  const distDeg=Math.sqrt(dx*dx+dy*dy);
+  const distKm=distDeg*111;
+  const spreadDegBase=10;
 
-  // --- kontrol animasi (play/pause/seek/speed)
-  const pl   = document.getElementById("btn-play");
-  const pa   = document.getElementById("btn-pause");
-  const spdR = document.getElementById("speed");
-  const spv  = document.getElementById("sp-val");
-  const prog = document.getElementById("prog");
-  const el   = document.getElementById("st-elap");
+  // === Playback controls ===
+  const pl=document.getElementById("btn-play");
+  const pa=document.getElementById("btn-pause");
+  const spdR=document.getElementById("speed");
+  const spv=document.getElementById("sp-val");
+  const prog=document.getElementById("prog");
+  const el=document.getElementById("st-elap");
+  let play=false, cur=0;
+  let spd=parseFloat(spdR.value)||1;
 
-  let play = false;
-  let cur  = 0;                  // detik sekarang
-  let spd  = parseFloat(spdR.value) || 1;
-  const dur = ts.at(-1);         // durasi total (detik)
+  spv.textContent=spd.toFixed(1)+"×";
+  el.textContent=Math.round(cur)+" s";
 
-  // tampilkan awal
-  spv.textContent = (spd >= 10 ? Math.round(spd) : spd.toFixed(1)) + "×";
-  el.textContent = Math.round(cur) + " s";
-
-  // --- UI handlers
-  spdR.oninput = e => {
-    spd = parseFloat(e.target.value);
-    spv.textContent = (spd >= 10 ? Math.round(spd) : spd.toFixed(1)) + "×";
+  spdR.oninput=e=>{
+    spd=parseFloat(e.target.value);
+    spv.textContent=spd.toFixed(1)+"×";
   };
-  pl.onclick = () => { play = true;  pl.disabled = true;  pa.disabled = false; };
-  pa.onclick = () => { play = false; pl.disabled = false; pa.disabled = true;  };
-
-  prog.oninput = e => {
-    cur = parseFloat(e.target.value) / 100 * dur;
-    el.textContent = Math.round(cur) + " s";
-    updateDeck();
-    updateInfoPanel(cur);
+  pl.onclick=()=>{play=true;pl.disabled=true;pa.disabled=false;};
+  pa.onclick=()=>{play=false;pl.disabled=false;pa.disabled=true;};
+  prog.oninput=e=>{
+    cur=parseFloat(e.target.value)/100*dur;
+    el.textContent=Math.round(cur)+" s";
+    updateDeck(); updateInfoPanel(cur);
   };
 
-  // --- builder layer (pakai cur untuk animasi)
+  // === Toggle zona abu ===
+// === Toggle zona abu (ingat state terakhir) ===
+const zoneBtn = document.getElementById("zoneToggleBtn");
+let showZone = localStorage.getItem("zoneState") === "on"; // default: false
+zoneBtn.classList.toggle("active", showZone);
+zoneBtn.querySelector("i").className = showZone ? "bi bi-bullseye" : "bi bi-ban";
+
+zoneBtn.onclick = () => {
+  showZone = !showZone;
+  zoneBtn.classList.toggle("active", showZone);
+  zoneBtn.querySelector("i").className = showZone ? "bi bi-bullseye" : "bi bi-ban";
+  localStorage.setItem("zoneState", showZone ? "on" : "off");
+  updateDeck();
+};
+
+
+  // === Warna per level altitude ===
+  function colorByAltitude(level){
+    if (!level) return [255,140,0];
+    if (level < 4000) return [255,100,100];
+    if (level < 6000) return [255,180,60];
+    if (level < 9000) return [255,240,60];
+    if (level < 11000) return [100,220,255];
+    return [180,100,255];
+  }
+
+  // === Layer builder ===
   function makeLayers(){
-    // progress 0..1
-    const frac = dur > 0 ? (cur / dur) : 0;
-    const rad = Math.PI / 180;
+    const frac=dur>0?(cur/dur):0;
+    const rad=Math.PI/180;
 
-    // skala panjang kipas & lebar kipas sesuai waktu
-    const fanDistDeg = distDeg * (0.3 + frac * 1.4);      // makin lama makin panjang
-    const spreadNow  = spreadDegBase * (0.5 + frac);      // makin lama makin lebar
-    const leftAngle  = baseAngle - spreadNow * rad;
-    const rightAngle = baseAngle + spreadNow * rad;
+    const fanDistDeg=distDeg*(0.3+frac*1.4);
+    const spreadNow=spreadDegBase*(0.5+frac);
+    const leftAngle=baseAngle-spreadNow*rad;
+    const rightAngle=baseAngle+spreadNow*rad;
+    const leftPoint=[lon0+fanDistDeg*Math.cos(leftAngle),lat0+fanDistDeg*Math.sin(leftAngle)];
+    const rightPoint=[lon0+fanDistDeg*Math.cos(rightAngle),lat0+fanDistDeg*Math.sin(rightAngle)];
+    const ashPolygon=[[lon0,lat0],leftPoint,rightPoint];
 
-    const leftPoint  = [lon0 + fanDistDeg * Math.cos(leftAngle),  lat0 + fanDistDeg * Math.sin(leftAngle)];
-    const rightPoint = [lon0 + fanDistDeg * Math.cos(rightAngle), lat0 + fanDistDeg * Math.sin(rightAngle)];
-
-    const ashPolygon = [ [lon0, lat0], leftPoint, rightPoint ];
-
-    const trajLayer = new TripsLayer({
-      id: "traj",
-      data: [{ path, timestamps: ts }],
-      getPath: d => d.path,
-      getTimestamps: d => d.timestamps,
-      getColor: color,
-      widthMinPixels: 5,
-      trailLength: 2000,      // panjang jejak
-      currentTime: cur        // ini yang bikin garis “bergerak”
+    const trajLayer=new TripsLayer({
+      id:"traj",
+      data:trips.map((t,i)=>({
+        path:t.path,
+        timestamps:t.timestamps,
+        idx:i,
+        level:t.level||(t.path?.[0]?.[2]||0)
+      })),
+      getPath:d=>d.path,
+      getTimestamps:d=>d.timestamps,
+      getColor:d=>colorByAltitude(d.level),
+      widthMinPixels:3,
+      opacity:0.95,
+      trailLength:dur,
+      currentTime:t0+cur
     });
 
-    const polygonLayer = new PolygonLayer({
-      id: "ash-zone",
-      data: [{ polygon: ashPolygon }],
-      getPolygon: d => d.polygon,
-      extruded: true,
-      elevationScale: 300,
-      getElevation: () => 500,        // “ketebalan” visual
-      getFillColor: [255, 150, 40, 120],
-      getLineColor: [255, 220, 120],
-      lineWidthMinPixels: 2,
-      stroked: true,
-      filled: true,
-      opacity: 0.4,
-      pickable: false
-    });
-
-    return [polygonLayer, trajLayer];
+    const layers=[trajLayer];
+    if(showZone){
+      layers.push(new PolygonLayer({
+        id:"ash-zone",
+        data:[{polygon:ashPolygon}],
+        getPolygon:d=>d.polygon,
+        extruded:true,
+        elevationScale:300,
+        getElevation:()=>500,
+        getFillColor:[255,150,40,100],
+        getLineColor:[255,220,120],
+        stroked:true,filled:true,opacity:0.4
+      }));
+    }
+    return layers;
   }
 
-  // --- pasang / update overlay deck.gl
-  if (deckOverlay) deckOverlay.setProps({ layers: makeLayers() });
-  else {
-    deckOverlay = new MapboxOverlay({ interleaved: true, layers: makeLayers() });
+  if(!deckOverlay){
+    deckOverlay=new deck.MapboxOverlay({interleaved:true,layers:makeLayers()});
     map.addControl(deckOverlay);
+  }else{
+    deckOverlay.setProps({layers:makeLayers()});
   }
 
-  function updateDeck(){
-    deckOverlay.setProps({ layers: makeLayers() });
-  }
+  function updateDeck(){deckOverlay.setProps({layers:makeLayers()});}
 
-  // --- Info panel (DI DALAM renderTrajectory agar punya akses variabel)
   function updateInfoPanel(curSec){
-    const volcano = document.getElementById("volcanoSelect").value;
-    const modelTxt = (document.getElementById("modelSelect").value === "custom") ? "Custom Model" : "NOAA HYSPLIT";
-    const frac = dur > 0 ? (curSec / dur) : 0;
-
-    const spreadKmNow = distKm * (0.3 + frac * 1.4);           // estimasi panjang kipas saat ini
-    const angleDeg = (baseAngle * 180 / Math.PI + 360) % 360;  // 0..360°
-
-    document.getElementById("infoVolcano").textContent = volcano[0].toUpperCase() + volcano.slice(1);
-    document.getElementById("infoModel").textContent   = modelTxt;
-    document.getElementById("infoTime").textContent    = Math.round(curSec) + " s";
-    document.getElementById("infoSpread").textContent  = spreadKmNow.toFixed(1) + " km";
-    document.getElementById("infoDir").textContent     = angleDeg.toFixed(0) + "°";
+    const volcano=document.getElementById("volcanoSelect").value;
+    const modelTxt=(document.getElementById("modelSelect").value==="custom")
+      ?"Custom Model (Multi-Level)":"NOAA HYSPLIT";
+    const frac=dur>0?(curSec/dur):0;
+    const spreadKmNow=distKm*(0.3+frac*1.4);
+    const angleDeg=(baseAngle*180/Math.PI+360)%360;
+    document.getElementById("infoVolcano").textContent=volcano[0].toUpperCase()+volcano.slice(1);
+    document.getElementById("infoModel").textContent=modelTxt;
+    document.getElementById("infoTime").textContent=Math.round(curSec)+" s";
+    document.getElementById("infoSpread").textContent=spreadKmNow.toFixed(1)+" km";
+    document.getElementById("infoDir").textContent=angleDeg.toFixed(0)+"°";
   }
 
-  // --- Kompas (pastikan tidak dobel)
-  if (!map.__northBound) {
-    map.__northBound = true;
-    const northArrow = document.getElementById("northArrow");
-    map.on("rotate", () => {
-      const bearing = map.getBearing();
-      northArrow.querySelector(".arrow").style.transform = `rotate(${-bearing}deg)`;
+  if(!map.__northBound){
+    map.__northBound=true;
+    const northArrow=document.getElementById("northArrow");
+    map.on("rotate",()=>{
+      const bearing=map.getBearing();
+      northArrow.querySelector(".arrow").style.transform=`rotate(${-bearing}deg)`;
     });
   }
 
-  // --- start: render awal
   updateDeck();
   updateInfoPanel(cur);
 
-  // --- loop animasi
-  let last = performance.now();
+  // === Animation loop ===
+  let last=performance.now();
   (function tick(now){
-    const dt = (now - last) / 1000; last = now;
-    if (play) {
-      cur += dt * spd;
-      if (cur >= dur) { cur = dur; play = false; pl.disabled = false; pa.disabled = true; }
-      prog.value = (dur > 0) ? (cur / dur) * 100 : 0;
-      el.textContent = Math.round(cur) + " s";
-      updateDeck();
-      updateInfoPanel(cur);
+    const dt=(now-last)/1000; last=now;
+    if(play){
+      cur+=dt*spd;
+      if(cur>=dur){cur=dur;play=false;pl.disabled=false;pa.disabled=true;}
+      prog.value=(dur>0)?(cur/dur)*100:0;
+      el.textContent=Math.round(cur)+" s";
+      updateDeck(); updateInfoPanel(cur);
     }
     requestAnimationFrame(tick);
   })(last);
 }
-/* === Tambahan API visualizer === */
-
-// 🌫️ Sebaran abu (ash dispersion)
-document.getElementById("dispersionBtn").addEventListener("click", async () => {
-  const volcano = document.getElementById("volcanoSelect").value;
-  const status = document.getElementById("statusText");
-  status.textContent = "⏳ Memuat sebaran abu...";
-  try {
-    const res = await fetch(`/api/ash_dispersion?volcano=${volcano}`);
-    const data = await res.json();
-    if (data.error) throw new Error(data.error);
-    status.textContent = "✅ Sebaran abu dimuat!";
-    renderAshDispersion(data);
-  } catch (e) {
-    status.textContent = "❌ Gagal memuat sebaran abu: " + e.message;
-  }
-});
-
-function renderAshDispersion(data) {
-  const { ScatterplotLayer, MapboxOverlay } = deck;
-  const points = data.points; // [lon, lat, intensity]
-
-  const ashLayer = new ScatterplotLayer({
-    id: "ash-points",
-    data: points.map(p => ({ position: [p[0], p[1]], intensity: p[2] })),
-    getPosition: d => d.position,
-    getRadius: d => 20000 * d.intensity,
-    getFillColor: [255, 150, 40, 100],
-    radiusMinPixels: 2,
-    radiusMaxPixels: 20,
-    pickable: false
-  });
-
-  if (deckOverlay) deckOverlay.setProps({ layers: [...deckOverlay.props.layers, ashLayer] });
-  else {
-    deckOverlay = new MapboxOverlay({ interleaved: true, layers: [ashLayer] });
-    map.addControl(deckOverlay);
-  }
-}
-
-// ✈️ Zona aman penerbangan
-document.getElementById("safetyBtn").addEventListener("click", async () => {
-  const status = document.getElementById("statusText");
-  status.textContent = "⏳ Memuat zona aman penerbangan...";
-  try {
-    const res = await fetch(`/api/flight_safety`);
-    const data = await res.json();
-    renderFlightSafety(data);
-    status.textContent = "✅ Zona aman FL dimuat!";
-  } catch (e) {
-    status.textContent = "❌ Gagal memuat zona aman: " + e.message;
-  }
-});
-
-function renderFlightSafety(data) {
-  const { PolygonLayer } = deck;
-  const zones = data.zones;
-
-  const layers = zones.map((z, i) => new PolygonLayer({
-    id: `fl-zone-${i}`,
-    data: [{ polygon: z.coords }],
-    getPolygon: d => d.polygon,
-    filled: true,
-    stroked: true,
-    getFillColor: z.risk === "safe" ? [0,255,100,60] : [255,80,0,80],
-    getLineColor: [255,255,255],
-    lineWidthMinPixels: 2
-  }));
-
-  deckOverlay.setProps({ layers: [...deckOverlay.props.layers, ...layers] });
-}
-
-// 💨 Arah dan kecepatan angin
-document.getElementById("windBtn").addEventListener("click", async () => {
-  const status = document.getElementById("statusText");
-  status.textContent = "⏳ Memuat data angin...";
-  try {
-    const res = await fetch(`/api/weather_wind`);
-    const data = await res.json();
-    renderWind(data);
-    status.textContent = "✅ Angin dimuat!";
-  } catch (e) {
-    status.textContent = "❌ Gagal memuat data angin: " + e.message;
-  }
-});
-
-function renderWind(data) {
-  const { IconLayer } = deck;
-  const vectors = data.vectors; // [lon, lat, u, v]
-
-  const windLayer = new IconLayer({
-    id: "wind-vectors",
-    data: vectors.map(v => ({
-      position: [v[0], v[1]],
-      angle: Math.atan2(v[3], v[2]) * 180 / Math.PI,
-      speed: Math.sqrt(v[2] ** 2 + v[3] ** 2)
-    })),
-    getPosition: d => d.position,
-    getIcon: () => ({
-      url: "https://cdn-icons-png.flaticon.com/512/54/54425.png",
-      width: 128,
-      height: 128
-    }),
-    getSize: d => Math.min(30, 5 + d.speed * 1.2),
-    getAngle: d => d.angle,
-    sizeUnits: "pixels",
-    pickable: false
-  });
-
-  deckOverlay.setProps({ layers: [...deckOverlay.props.layers, windLayer] });
-}
-
 </script>
+
 </body>
 </html>
