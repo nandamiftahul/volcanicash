@@ -1,0 +1,32 @@
+POINT_SOURCE_5
+
+source_name = test_again
+source_sector_name = NATURAL
+
+source_latitude = -8.100000
+source_longitude = 112.916667
+
+release_rate_unit = kg/sec
+vertical_unit = m
+vertical_distribution = SINGLE_LEVEL_DYNAMIC
+stack_height = 3657.0 m
+
+# Generated automatically from Darwin VAAC advisory
+# Advisory NR : 2026/515
+# DTG         : 2026-05-06T10:50:00Z
+# Main VA DTG : 2026-05-06T10:30:00Z
+# PSN         : S0806 E11255
+# Main cloud  : SFC/FL150 S0810 E11251 - S0733 E11221 - S0724 E11307 - S0808 E11302 MOV NW 10KT
+# No emission : FALSE
+#
+# par_str_point format:
+# y m d h m sec  xy_size  bottom_m  top_m  z_velocity  temp_K  cocktail  rate_kg_s
+
+par_str_point = 2026 5 6 15 00 0.  1.  3657.0 4572.0  0. 273. VOLCANO_ASH_COCKTAIL 1000.000
+par_str_point = 2026 5 6 17 00 0.  1.  3657.0 4572.0  0. 273. VOLCANO_ASH_COCKTAIL 0.000
+
+hour_in_day_index = VOLCANO_ASH_COCKTAIL 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.
+day_in_week_index = VOLCANO_ASH_COCKTAIL 1. 1. 1. 1. 1. 1. 1.
+month_in_year_index = VOLCANO_ASH_COCKTAIL 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1. 1.
+
+END_POINT_SOURCE_5

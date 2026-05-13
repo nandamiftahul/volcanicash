@@ -1,0 +1,125 @@
+CONTROL_V5_3
+
+LIST = GENERAL_PARAMETERS
+case_name = test_again
+simulation_type = EULERIAN
+direction_in_time = FORWARD
+start_time = 2026 05 07 22 00 00
+end_time = 2026 05 07 22 10 00
+time_step = 10 min
+computation_accuracy = 5
+cut_area_source_if_outside_meteo_grid = YES
+END_LIST = GENERAL_PARAMETER
+
+LIST = DISPERSION_PARAMETERS
+grid_method = OUTPUT_GRID
+vertical_method = CUSTOM_LAYERS
+level_type = HEIGHT_FROM_SURFACE
+vertical_unit = m
+layer_thickness = 100. 150. 250. 250. 250. 500. 500. 1000. 1000. 1000. 2000. 2000. 3000. 3000. 3000. 4000.
+END_LIST = DISPERSION_PARAMETERS
+
+LIST = METEO_PARAMETERS
+dynamic_meteo_file = GRIB ./meteo/ecmwf_realtime_hybrid_semeru_crop.grib
+static_meteo_file = GRIB ./meteo/ecmwf_realtime_hybrid_semeru_crop.grib
+meteo_time_step = 1 hr
+if_wait_for_data = NO
+abl_parameterization_method = DRY_ABL
+number_of_precipitation_fields = 2
+use_lai = NONE
+END_LIST = METEO_PARAMETERS
+
+LIST = EMISSION_PARAMETERS
+emission_source = EULERIAN ./ini/src_semeru_point_ecmwf_test.v5
+cut_area_source_if_outside_meteo_grid = YES
+if_technical_source_dump = NONE
+END_LIST = EMISSION_PARAMETERS
+
+LIST = TRANSFORMATION_PARAMETERS
+transformation = PASSIVE EULERIAN
+aerosol_dynamics = SIMPLE EULERIAN
+dry_deposition_scheme = KS2011_TF
+wet_deposition_scheme = NO_SCAVENGING
+if_actual_humidity_for_particle_size = YES
+default_relative_humidity = 0.8
+mass_low_threshold = STANDARD_ACCURACY
+END_LIST = TRANSFORMATION_PARAMETERS
+
+LIST = INITIAL_AND_BOUNDARY_CONDITIONS
+lateral_boundary_type = ZERO
+top_boundary_type = ZERO
+bottom_boundary_type = ZERO
+END_LIST = INITIAL_AND_BOUNDARY_CONDITIONS
+
+LIST = OUTPUT_PARAMETERS
+source_id = NO_SOURCE_SPLIT
+vertical_method = CUSTOM_LAYERS
+level_type = HEIGHT_FROM_SURFACE
+vertical_unit = m
+layer_thickness = 100. 150. 250. 250. 250. 500. 500. 1000. 1000. 1000. 2000. 2000. 3000. 3000. 3000. 4000.
+output_time_step = 1 hr
+output_times = REGULAR
+output_format = NETCDF3
+time_split = ALL_IN_ONE
+template = ./output/%case/ash_output
+variable_list = ./ini/output_config_minimal.ini
+massmap_precision_factor = 1024
+
+grid_method = CUSTOM_GRID
+grid_type = lon_lat
+grid_title = semeru_output_grid
+resol_flag = 128
+ifReduced = 0
+earth_flag = 0
+wind_component = 0
+reduced_nbr_str = 0
+
+# Semeru-focused domain
+# Must stay inside ERA5 meteo domain 100..120 / -12..5
+lon_start = 112.30
+lat_start = -8.90
+lon_end = 113.70
+lat_end = -7.40
+dx = 0.1
+dy = 0.1
+
+lat_s_pole = -90.
+lon_s_pole = 0.
+lat_pole_stretch = 0.
+lon_pole_stretch = 0.
+END_LIST = OUTPUT_PARAMETERS
+
+LIST = STANDARD_SETUP
+advection_method_eulerian = EULERIAN_V5
+mass_distributor = TRIANGLE_SLAB
+diffuse_vert_cm = YES
+grav_separation = NO
+reference_4_low_mass_threshold = DEFAULT
+kz_profile_method = SIMPLE_KZ
+advection_method_lagrangian = LAGRANGIAN_WIND_ENDPOINT_3D
+random_walk_method = FULLY_MIXED
+advection_method_default = EULERIAN
+abl_height_method = COMBINATION
+continuity_equation = anelastic_v2
+wind_diagnostics = opentop
+horizontal_interpolation = LINEAR
+vertical_interpolation = LINEAR
+time_interpolation = LINEAR
+standard_setup_directory = ./ini
+nuclide_database_fnm = ^silam_nuclides.dat
+chemical_database_fnm = ^silam_chemicals.dat
+standard_cocktail_fnm = ^standard.cocktails
+grib_code_table_fnm = ^grib_code_table_v5.silam
+netcdf_name_table_fnm = ^netcdf_name_table.silam
+timezone_list_fnm = ^tzindex.dat
+photolysis_data_file = ^photolysis_finrose.dat
+land_use_data_meta_file = ^land_use_features_USGS_Eurasia.dat
+optical_properties_meta_data_file = ^optical_properties.dat
+allow_zero_forecast_length = NO
+precipitation_low_limit = 0.1 mm/hr
+print_debug_info = DEBUG_INFO_YES
+cloud_report_interval = 1
+disregard_meteo_data_sources = YES
+END_LIST = STANDARD_SETUP
+
+END_CONTROL_V5_3
